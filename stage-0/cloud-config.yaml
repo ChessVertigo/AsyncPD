@@ -1,0 +1,61 @@
+#cloud-config
+
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+write_files:
+  - path: /var/lib/docker/daemon.json
+    permissions: 0644
+    owner: root
+    content: |
+      {
+        "live-restore": true,
+        "storage-driver": "overlay2",
+        "log-opts": {
+          "max-size": "1024m"
+        }
+      }
+  %{~ for k, v in disks ~}
+  - path: /etc/systemd/system/disk-${k}.service
+    permissions: 0644
+    owner: root
+    content: |
+      [Unit]
+      Description=Data disk format/mount for ${k}
+      ConditionPathExists=/dev/disk/by-id/google-${k}
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/mkdir -p /mnt/disks/${k}
+      ExecStart=/bin/bash -c \
+        "/bin/lsblk -fn -o FSTYPE \
+          /dev/disk/by-id/google-${k} |grep ext4 \
+        || mkfs.ext4 -m 0 -F -E lazy_itable_init=0,lazy_journal_init=0,discard \
+          /dev/disk/by-id/google-${k}"
+      ExecStart=/bin/bash -c \
+        "mount |grep /mnt/disks/${k} \
+        || mount -t ext4 /dev/disk/by-id/google-${k} /mnt/disks/${k}"
+      ExecStart=/sbin/resize2fs /dev/disk/by-id/google-${k}
+      RemainAfterExit=true
+  %{~ endfor ~}
+
+bootcmd:
+  - systemctl start node-problem-detector
+
+runcmd:
+  - systemctl daemon-reload
+  - systemd-run --on-calendar="*-*-* *:*:00,10,20,30,40,50" bash -c "date >>/var/log/test-date.txt"
+  %{~ for k, v in disks ~}
+  - systemctl start disk-${k}
+  - systemd-run --on-calendar="*-*-* *:*:00,10,20,30,40,50" bash -c "date >>/mnt/disks/${k}/test-date.txt"
+  %{~ endfor ~}
