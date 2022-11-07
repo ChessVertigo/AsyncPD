@@ -1,0 +1,19 @@
+{
+  "project": "tf-playground-svpc-gce",
+  "zone": "europe-west3-c",
+  "type": "e2-small",
+  "boot_disk": {
+    "size": 10,
+    "image": "cos-cloud/cos-93-lts",
+    "type": "pd-balanced"
+  },
+  "additional_disks": {
+    "data": {
+      "size": 10,
+      "type": "pd-balanced"
+    }
+  },
+  "subnets": [
+    "projects/tf-playground-svpc-net/regions/europe-west3/subnetworks/gce"
+  ]
+}
